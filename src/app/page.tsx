@@ -1,5 +1,6 @@
 import Features from "./modules/features"
 import Hero from "./modules/hero"
+import Pricing from "./modules/pricing"
 
 
 const Page = () => {
@@ -7,6 +8,7 @@ const Page = () => {
     <div>
       <Hero />
       <Features />
+      <Pricing />
     </div>
   )
 }
