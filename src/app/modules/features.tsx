@@ -31,6 +31,15 @@ const Features = () => {
             <FeatureCard key={index} feature={feature} index={index} />
           ))}
         </div>
+        <div className="grid lg:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {features.slice(3).map((feature, index) => (
+            <FeatureCard
+              key={feature.title}
+              feature={feature}
+              index={index + 3}
+            />
+          ))}
+        </div>
       </div>
     </section>
   );
