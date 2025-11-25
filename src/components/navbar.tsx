@@ -81,7 +81,7 @@ const Navbar = () => {
             </button>
             <Button
               variant="hero"
-              className="w-full font-semibold"
+              className="w-full font-semibold text-white"
               onClick={handleSubmit}
             >
               {session?.user ? "Launch App" : "Sign In"}
