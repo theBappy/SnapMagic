@@ -47,7 +47,7 @@ const Pricing = () => {
         <div className="grid lg:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {plans?.map((plan, index) => (
             <motion.div
-              key={plan.name}
+              key={index}
               initial={{ opacity: 0, y: 50 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -93,18 +93,20 @@ const Pricing = () => {
                 </div>
 
                 <div className="space-y-4 mb-8">
-                  {plan?.features?.map((feature) => (
-                    <div key={index} className={"flex items-center space-x-3"}>
+                  {plan?.features?.map((feature, featureIndex) => (
+                    <div
+                      key={`${index}-${featureIndex}`}
+                      className="flex items-center space-x-3"
+                    >
                       <div className="shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
                         <Check className="w-3 h-3 text-primary" />
                       </div>
                       <span className="text-foreground">{feature}</span>
                     </div>
                   ))}
-
-                  {plan?.limitations?.map((limitation) => (
+                  {plan?.limitations?.map((limitation, limIndex) => (
                     <div
-                      key={limitation}
+                      key={`${index}-lim-${limIndex}`}
                       className="flex items-center space-x-3"
                     >
                       <div className="shrink-0 w-5 h-5 rounded-full bg-muted flex items-center justify-center">
