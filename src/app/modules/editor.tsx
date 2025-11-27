@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import UploadZone from "./upload-zone";
 import { primaryTools, secondaryTools, allTools } from "../constants";
 import CanvasEditor from "./canvas-editor";
+import { saveAs } from "file-saver";
 
 type JobStatus = "idle" | "queued" | "processing" | "completed" | "error";
 
@@ -33,17 +34,175 @@ const Editor = () => {
     setCurrentJob(null);
   };
 
-  const handlePromptSubmit = async () => {};
+  const handlePromptSubmit = async () => {
+    if (!promptText.trim()) return;
 
-  const getImageKitTransform = (toolId: string, prompt?: string): string => {
-    return "";
+    const tool = allTools.find((t) => t.hasPrompt && !activeEffects.has(t.id));
+    if (!tool) return;
+
+    await applyEffect(tool.id, promptText);
+    setShowPromptInput(false);
+    setPromptText("");
   };
 
-  const handleToolClick = async (toolId: string) => {};
+  const getImageKitTransform = (toolId: string, prompt?: string): string => {
+    const transforms: Record<string, string> = {
+      "e-bgremove": "e-bgremove",
+      "e-removedotbg": "e-removedotbg",
+      "e-changebg": prompt
+        ? `e-changebg-prompt-${encodeURIComponent(prompt)}`
+        : "e-changebg",
+      "e-edit": prompt ? `e-edit:${encodeURIComponent(prompt)}` : "e-edit",
+      "bg-genfill": prompt
+        ? `bg-genfill:${encodeURIComponent(prompt)}`
+        : "bg-genfill",
+      "e-dropshadow": "e-dropshadow",
+      "e-retouch": "e-retouch",
+      "e-upscale": "e-upscale",
+      "e-genvar": prompt
+        ? `e-genvar:${encodeURIComponent(prompt)}`
+        : "e-genvar",
+      "e-crop-face": "e-crop-face",
+      "e-crop-smart": "e-crop-smart",
+    };
 
-  const applyEffect = async (toolId: string, prompt?: string) => {};
+    return transforms[toolId] || "";
+  };
 
-  const handleExport = (format: string) => {};
+  const handleToolClick = async (toolId: string) => {
+    if (!uploadedImage) return;
+
+    const tool = allTools.find((t) => t.id === toolId);
+
+    if (!tool) return;
+
+    // Toggle effect on/off
+    const newActiveEffects = new Set(activeEffects);
+    if (newActiveEffects.has(toolId)) {
+      newActiveEffects.delete(toolId);
+      setActiveEffects(newActiveEffects);
+
+      // remove effect from image
+      const remainingEffects = Array.from(newActiveEffects);
+
+      const newImageUrl =
+        remainingEffects.length > 0
+          ? `${uploadedImage}?tr=${remainingEffects
+              .map((effect) => getImageKitTransform(effect))
+              .join(",")}`
+          : uploadedImage;
+      setProcessedImage(newImageUrl);
+      return;
+    }
+
+    // Check if tool requires prompt
+    if (tool.hasPrompt) {
+      setShowPromptInput(true);
+      setPromptText("");
+      return;
+    }
+
+    // Apply effect immediately
+    await applyEffect(toolId);
+  };
+
+  const applyEffect = async (toolId: string, prompt?: string) => {
+    if (!uploadedImage) return;
+
+    const newJob: ProcessingJob = {
+      id: Date.now().toString(),
+      type: toolId,
+      status: "queued",
+      progress: 0,
+    };
+
+    setCurrentJob(newJob);
+
+    // Apply effect to active effects
+    const newActiveEffects = new Set(activeEffects);
+    newActiveEffects.add(toolId);
+    setActiveEffects(newActiveEffects);
+
+    // Generate the ImageKit transformation URL
+    const allEffects = Array.from(newActiveEffects);
+    const transforms = allEffects.map((effect) =>
+      getImageKitTransform(effect, effect === toolId ? prompt : undefined)
+    );
+    const newImageUrl = `${uploadedImage}?tr=${transforms.join(",")}`;
+
+    try {
+      // Start polling the AI transformation URL to check when it's complete
+      setCurrentJob((prev) =>
+        prev ? { ...prev, status: "processing", progress: 10 } : null
+      );
+
+      let attempts = 0;
+      const maxAttempts = 60; // 5 minutes max (5s intervals)
+      const pollInterval = 5000; // 5seconds / 5k ms
+
+      const pollImageKit = async (): Promise<boolean> => {
+        attempts++;
+
+        try {
+          const response = await fetch(newImageUrl, {
+            method: "HEAD",
+            cache: "no-cache",
+          });
+
+          if (response.ok) {
+            setProcessedImage(newImageUrl);
+            setCurrentJob((prev) =>
+              prev ? { ...prev, progress: 100, status: "completed" } : null
+            );
+
+            const completedJob = {
+              ...newJob,
+              status: "completed" as JobStatus,
+              progress: 100,
+              result: newImageUrl,
+            };
+            setEditHistory((prev) => [completedJob, ...prev.slice(0, 2)]);
+            return true;
+          }
+        } catch (error) {
+          console.log(`Poll attempt ${attempts}: AI still processing...`);
+        }
+
+        const progress = Math.min(10 + attempts * 1.5, 90);
+        setCurrentJob((prev) => (prev ? { ...prev, progress } : null));
+
+        if (attempts >= maxAttempts) {
+          setProcessedImage(newImageUrl);
+          setCurrentJob((prev) =>
+            prev ? { ...prev, progress: 100, status: "completed" } : null
+          );
+
+          const completedJob = {
+            ...newJob,
+            status: "completed" as JobStatus,
+            progress: 100,
+            result: newImageUrl,
+          };
+          setEditHistory((prev) => [completedJob, ...prev.slice(0, 2)]);
+          return true;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        return pollImageKit();
+      };
+
+      await pollImageKit();
+    } catch (error) {
+      console.error("Error applying effect:", error);
+      setCurrentJob((prev) => (prev ? { ...prev, status: "error" } : null));
+    }
+  };
+
+  const handleExport = (format: string) => {
+    if (!processedImage) return;
+
+    saveAs(processedImage, `SnapMagic-${Date.now()}.${format}`);
+  };
 
   return (
     <section id="editor" className="py-24 relative overflow-hidden">

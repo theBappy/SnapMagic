@@ -57,13 +57,76 @@ const UploadZone = ({ onImageUpload }: UploadZoneProps) => {
     []
   );
 
-  const getUploadAuthParams = async () => {};
+  const getUploadAuthParams = async () => {
+    const response = await fetch("/api/upload-auth");
 
-  const uploadToImageKit = async (file: File): Promise<string> => {
-    return "";
+    if (!response.ok) {
+      throw new Error("Failed to get upload auth params");
+    }
+    const data = await response?.json();
+
+    return data;
   };
 
-  const handleFiles = async (files: File[]) => {};
+  const uploadToImageKit = async (file: File): Promise<string> => {
+    try {
+      // Get authentication parameters
+      const { token, expire, signature, publicKey } =
+        await getUploadAuthParams();
+
+      const result = await upload({
+        file,
+        fileName: file?.name,
+        folder: "snapmagic-uploads",
+        expire,
+        token,
+        signature,
+        publicKey,
+        onProgress: (event) => {
+          // Update progress if needed
+          console.log(
+            `Upload progress: ${(event.loaded / event.total) * 100}%`
+          );
+        },
+      });
+
+      return result.url || "";
+    } catch (error) {
+      if (error instanceof ImageKitInvalidRequestError) {
+        throw new Error("Invalid upload request");
+      } else if (error instanceof ImageKitServerError) {
+        throw new Error("ImageKit server error");
+      } else if (error instanceof ImageKitUploadNetworkError) {
+        throw new Error("Network error during upload");
+      } else {
+        throw new Error("Upload failed");
+      }
+    }
+  };
+
+  const handleFiles = async (files: File[]) => {
+    const imageFile = files?.find((file) => file.type.startsWith("image/"));
+    if (imageFile) {
+      setIsUploading(true);
+
+      try {
+        // Check usage first
+        await checkUsage();
+
+        // Update usage count
+        await updateUsage();
+
+        // Upload to ImageKit
+        const imageUrl = await uploadToImageKit(imageFile);
+        setUploadedImage(imageUrl);
+        onImageUpload(imageUrl);
+      } catch (error) {
+        console.error("Upload failed:", error);
+      } finally {
+        setIsUploading(false);
+      }
+    }
+  };
 
   const checkUsage = async () => {
     const response = await fetch("/api/usage");
@@ -92,7 +155,10 @@ const UploadZone = ({ onImageUpload }: UploadZoneProps) => {
     return data;
   };
 
-  const clearImage = () => {};
+  const clearImage = () => {
+    setUploadedImage(null);
+    onImageUpload("");
+  };
 
   return (
     <motion.div
